@@ -1,0 +1,139 @@
+---
+title: "Machine Learning - Personal Activity"
+author: "Thom"
+date: "October 22, 2015"
+output: html_document
+---
+```{r echo=FALSE, message=F, warning=F}
+library(data.table)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(reshape)
+library(caret)
+library(corrplot)
+set.seed(1234)
+```
+# Overview
+
+
+## Load & Clean Data
+
+The training data is loaded. Then nulls are removed as well unrelevant data i.e. timestamps, name, etc.
+
+```{r}
+training <- read.csv("pml-training.csv", 
+                   header=T,  na.strings = c("", "NA"))
+
+#Get Rid of null data
+data_names <- names(training[,colSums(is.na(training)) == 0])
+train_data <- training[,c(data_names,"classe")]
+#Get rid of . . .
+train_data <- train_data[8:60]
+
+# Training/Test set
+inTrain = createDataPartition(train_data$classe, p = 0.6, list = F)
+train = train_data[inTrain,]
+train_test = train_data[-inTrain,]
+
+```
+
+## Data Exploration
+
+First we take a look at hostograms of the relevant data.
+
+```{r message=F, warning=F, fig.width=8, fig.height=8, fig.align='center'}
+outcome = which(names(train) == "classe")
+
+train_melt <- melt(train[,-outcome])
+
+ggplot(train_melt,aes(x = value)) + 
+    facet_wrap(~variable,scales = "free_x") + 
+    geom_histogram(color="blue")
+```
+
+Upon inspection it looks las if many of the variabels have similar distrbutions and may be releated. To examin this further we look for data correlation.
+
+```{r message=F, warning=F, fig.width=8, fig.height=8, fig.align='center'}
+
+c <- cor(train[,-outcome])
+corrplot(c, order = "FPC", method = "color", type = "lower", tl.cex = 0.8, 
+         tl.col = rgb(0, 0, 0))
+
+```
+
+## Feature Selection
+We see that many of the varialbes are indeed related, we want to remove these from the data to help ensure an accurate model. Any variables with a correlation greater than 80% will be removed.
+
+```{r}
+
+corr_cols = findCorrelation(abs(cor(train[,-outcome])),0.80)
+corr_features = names(train)[corr_cols]
+train = train[,-corr_cols]
+
+```
+
+The variables below are cooralated and have been removed.
+
+`r corr_features `
+
+## Training
+Now that we have the features defined models will be created, k-Nearest Neighbor and Random Foest will be used. 
+
+```{r message=F, warning=F, cache=TRUE}
+ctrlKNN = trainControl(method = "repeatedcv")
+modelKNN = train(classe ~ ., train, method = "knn", 
+                 trControl = ctrlKNN,
+                 preProcess=c("center","scale"))
+
+ctrlRF = trainControl(method = "oob")
+modelRF = train(classe ~ ., train, method = "rf",
+                trControl = ctrlRF,
+                ntree = 200,
+                preProcess=c("center","scale"))
+
+```
+
+### k-Nearest Neighbor Errors
+
+```{r message=F, warning=F}
+fitKNN = predict(modelKNN, train_test)
+knn <- confusionMatrix(fitKNN, train_test$classe)
+knn
+```
+ 
+### Random Forest Errors
+
+```{r message=F, warning=F}
+fitRF = predict(modelRF, train_test)
+rf <- confusionMatrix(fitRF, train_test$classe)
+rf
+```
+
+We see the Random Forest is nearly  `r rf$overall[[1]]` accurate while the KNN is only  `r knn$overall[[1]]` accurate.  The Random Forest model will be used on the test data
+
+
+## Run Model Against Test Data 
+
+```{r}
+testing  <- read.csv("pml-testing.csv", header=T,  na.strings = c("", "NA"))
+
+test_results <- predict(modelRF, testing)
+
+data.frame(test_results)
+
+```
+
+
+```{r echo=F}
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(test_results)
+```
