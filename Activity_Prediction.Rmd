@@ -16,11 +16,13 @@ library(corrplot)
 set.seed(1234)
 ```
 # Overview
-
+The goal of this project is to predict the type of exercise a person did solely by movement data from  tracking devices such as Jawbone Up, Nike FuelBand, or Fitbit. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).  
 
 ## Load & Clean Data
 
-The training data is loaded. Then nulls are removed as well unrelevant data i.e. timestamps, name, etc.
+The training data is loaded. 
+
+Then nulls are removed as well unrelevant data i.e. timestamps, name, etc.
 
 ```{r}
 training <- read.csv("pml-training.csv", 
@@ -41,7 +43,7 @@ train_test = train_data[-inTrain,]
 
 ## Data Exploration
 
-First we take a look at hostograms of the relevant data.
+First we take a look at histograms of the relevant data.
 
 ```{r message=F, warning=F, fig.width=8, fig.height=8, fig.align='center'}
 outcome = which(names(train) == "classe")
@@ -53,7 +55,8 @@ ggplot(train_melt,aes(x = value)) +
     geom_histogram(color="blue")
 ```
 
-Upon inspection it looks las if many of the variabels have similar distrbutions and may be releated. To examin this further we look for data correlation.
+
+Upon inspection it looks las if many of the variabels have similar distrbutions and may be related To examin this further we look for data correlation.
 
 ```{r message=F, warning=F, fig.width=8, fig.height=8, fig.align='center'}
 
@@ -99,6 +102,11 @@ modelRF = train(classe ~ ., train, method = "rf",
 
 ```{r message=F, warning=F}
 fitKNN = predict(modelKNN, train_test)
+
+train_test$right <- fitKNN == train_test$classe
+qplot(train_test$roll_belt, train_test$roll_arm, colour=train_test$right, data=train_test,
+      main=" KNN Errors")
+
 knn <- confusionMatrix(fitKNN, train_test$classe)
 knn
 ```
@@ -107,11 +115,18 @@ knn
 
 ```{r message=F, warning=F}
 fitRF = predict(modelRF, train_test)
+
+train_test$right <- fitRF == train_test$classe
+qplot(train_test$roll_belt, train_test$roll_arm, colour=train_test$right, data=train_test,
+      main=" Random Forest Errors")
+
 rf <- confusionMatrix(fitRF, train_test$classe)
 rf
 ```
 
-We see the Random Forest is nearly  `r rf$overall[[1]]` accurate while the KNN is only  `r knn$overall[[1]]` accurate.  The Random Forest model will be used on the test data
+We see the Random Forest is   `r rf$overall[[1]]` accurate  with an  out of sample error of  `r 1 - rf$overall[[1]]`. The KNN is  `r knn$overall[[1]]` accurate out of sample error of  `r 1 - knn$overall[[1]]`.  
+
+The Random Forest model will be used on the test data
 
 
 ## Run Model Against Test Data 
